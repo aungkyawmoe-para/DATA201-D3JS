@@ -400,7 +400,7 @@ function renderDonutChart(data) {
         .on("mouseover", (e, d) => {
             // Also show percentage in the tooltip!
             const pct = ((d.data.value / totalTargeted) * 100).toFixed(1);
-            showTooltip(e, `Sector: ${d.data.sector}<br>Targeted: ${formatNum(d.data.value)} (${pct}%)`);
+            showTooltip(e, `Sector: ${d.data.sector}<br>People in need: ${formatNum(d.data.value)} (${pct}%)`);
         })
         .on("mouseout", hideTooltip);
 
