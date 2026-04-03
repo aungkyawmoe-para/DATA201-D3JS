@@ -79,6 +79,7 @@
             <h3>Monthly Funding Received</h3>
             <svg id="time-series"></svg>
         </div>
+
         <div class="chart-container">
             <h3>Top Locations by Funding Gap</h3>
             <svg id="ranking-chart"></svg>
@@ -87,6 +88,14 @@
             <h3>Sector Distribution (People in Need)</h3>
             <svg id="donut-chart"></svg>
         </div>
+	<div class="chart-container">
+            <h3>Incidents by Location (Top 10)</h3>
+            <svg id="incident-chart"></svg>
+    	</div>
+    	<div class="chart-container">
+            <h3>Access Constraints Count</h3>
+            <svg id="access-chart"></svg>
+    	</div>
     </div>
 
     <div class="table-container">
@@ -138,7 +147,9 @@
                     funding_received: rec,
                     funding_gap: req - rec,
                     date: parseDate(d.date) || new Date(),
-                    rawDate: d.date
+                    rawDate: d.date,
+		    incidents: +d.incidents_reported || 0,
+                    access_constraint: d.access_constraint || "None"
                 };
             });
 
@@ -210,7 +221,10 @@ function updateDashboard() {
     renderTimeSeries(currentFilteredData);
     renderRankingChart(currentFilteredData);
     renderDonutChart(currentFilteredData);
+    renderIncidentChart(currentFilteredData);
+    renderAccessChart(currentFilteredData);
     renderTable(currentFilteredData);
+    
 }
 
         // 5. KPIs
@@ -440,6 +454,91 @@ function renderDonutChart(data) {
         .style("font-size", "12px")
         .style("alignment-baseline", "middle")
         .style("fill", "#333");
+}
+
+// (e) Incidents by Location Chart
+function renderIncidentChart(data) {
+    const svg = d3.select("#incident-chart");
+    svg.selectAll("*").remove();
+
+    // Bottom margin is large to fit the rotated township names
+    const margin = {top: 20, right: 20, bottom: 80, left: 50},
+          width = svg.node().getBoundingClientRect().width - margin.left - margin.right,
+          height = 350 - margin.top - margin.bottom;
+
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Group by township and sum incidents, taking top 10
+    const aggregated = Array.from(d3.rollup(data, 
+        v => d3.sum(v, d => d.incidents),
+        d => d.township
+    ), ([location, incidents]) => ({location, incidents}))
+    .sort((a,b) => b.incidents - a.incidents)
+    .slice(0, 10);
+
+    const x = d3.scaleBand().domain(aggregated.map(d => d.location)).range([0, width]).padding(0.2);
+    const y = d3.scaleLinear().domain([0, d3.max(aggregated, d => d.incidents) || 1]).nice().range([height, 0]);
+
+    // X Axis with angled labels
+    g.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x))
+        .selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-.8em")
+        .attr("dy", ".15em")
+        .attr("transform", "rotate(-45)");
+
+    g.append("g").call(d3.axisLeft(y).ticks(5));
+
+    // Draw Bars
+    g.selectAll("rect")
+        .data(aggregated).enter().append("rect")
+        .attr("class", "interactive-element")
+        .attr("x", d => x(d.location))
+        .attr("y", d => y(d.incidents))
+        .attr("width", x.bandwidth())
+        .attr("height", d => height - y(d.incidents))
+        .attr("fill", "#ff9800") // Orange color for incidents
+        .on("mouseover", (e, d) => showTooltip(e, `Location: ${d.location}<br>Total Incidents: ${d.incidents}`))
+        .on("mouseout", hideTooltip);
+}
+// (f) Access Constraints Count
+function renderAccessChart(data) {
+    const svg = d3.select("#access-chart");
+    svg.selectAll("*").remove();
+
+    // Left margin is large to fit the long constraint names (e.g. "Administrative Delay")
+    const margin = {top: 20, right: 20, bottom: 40, left: 130},
+          width = svg.node().getBoundingClientRect().width - margin.left - margin.right,
+          height = 350 - margin.top - margin.bottom;
+
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Group by constraint type and COUNT the occurrences
+    const aggregated = Array.from(d3.rollup(data, 
+        v => v.length, // .length counts how many rows have this constraint
+        d => d.access_constraint
+    ), ([constraint, count]) => ({constraint, count}))
+    .sort((a,b) => b.count - a.count);
+
+    const x = d3.scaleLinear().domain([0, d3.max(aggregated, d => d.count) || 1]).nice().range([0, width]);
+    const y = d3.scaleBand().domain(aggregated.map(d => d.constraint)).range([0, height]).padding(0.15);
+
+    g.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x).ticks(5).tickFormat(d3.format("d"))); // "d" ensures integers
+    g.append("g").call(d3.axisLeft(y));
+
+    // Draw horizontal bars
+    g.selectAll("rect")
+        .data(aggregated).enter().append("rect")
+        .attr("class", "interactive-element")
+        .attr("y", d => y(d.constraint))
+        .attr("x", 0)
+        .attr("height", y.bandwidth())
+        .attr("width", d => x(d.count))
+        .attr("fill", "#9c27b0") // Purple color for constraints
+        .on("mouseover", (e, d) => showTooltip(e, `Constraint: ${d.constraint}<br>Records: ${d.count}`))
+        .on("mouseout", hideTooltip);
 }
 
         // 7. Data Table
